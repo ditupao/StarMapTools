@@ -111,6 +111,7 @@ namespace StarMapTools
                 //加载UI
                 ui_StarMapToolsBasePanel = GameObject.Instantiate(prefab_StarMapToolsBasePanel, UIRoot.instance.overlayCanvas.transform);
                 ui_StarMapToolsBasePanel.transform.Find("TitleText").gameObject.AddComponent<Drag>();
+                ui_StarMapToolsBasePanel.SetActive(false);
                 //获取控件
                 TitleText = ui_StarMapToolsBasePanel.transform.Find("TitleText").GetComponent<Text>();
                 StarList =ui_StarMapToolsBasePanel.transform.Find("StarList").GetComponent<Dropdown>();
