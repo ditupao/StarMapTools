@@ -5,5 +5,6 @@
 演示视频 https://www.bilibili.com/video/BV1Vp4y1W7EN/
 
 v1.1更新内容<br>
-合并类文件(解决与QTools的冲突)
-增加按键配置文件
+合并类文件(解决与QTools的冲突)<br>
+增加按键配置文件<br>
+配置文件位置 \Dyson Sphere Program\BepInEx\config\sky.plugins.dsp.StarMapTools.cfg
