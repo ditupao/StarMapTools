@@ -8,7 +8,7 @@ using UnityEngine.UI;
 
 namespace StarMapTools
 {
-    [BepInPlugin("sky.plugins.dsp.StarMapTools", "StarMapTools", "1.0")]
+    [BepInPlugin("sky.plugins.dsp.StarMapTools", "StarMapTools", "1.1")]
     public class StarMapTools: BaseUnityPlugin
     {
         GameObject prefab_StarMapToolsBasePanel;//资源
@@ -21,10 +21,15 @@ namespace StarMapTools
         bool showGUI = false;//是否显示GUI
         bool keyLock = false;//按键锁
         GalaxyData galaxy;//星图数据
+
+        KeyCode switchGUIKey;
+        KeyCode tpKey;
         void Start()
         {
             Harmony.CreateAndPatchAll(typeof(StarMapTools), null);
             //加载资源
+            switchGUIKey = Config.Bind<KeyCode>("config", "switchGUI", KeyCode.F1, "开关GUI的按键").Value;
+            tpKey = Config.Bind<KeyCode>("config", "tp", KeyCode.F2, "传送按键").Value;
             var ab = AssetBundle.LoadFromStream(Assembly.GetExecutingAssembly().GetManifestResourceStream("StarMapTools.starmaptools"));
             prefab_StarMapToolsBasePanel = ab.LoadAsset<GameObject>("StarMapToolsBasePanel");
         }
@@ -33,12 +38,12 @@ namespace StarMapTools
             if (dataLoadOver)
             {
                 //根据按键更新showGUI
-                if (Input.GetKeyDown(KeyCode.F1) && !keyLock)
+                if (Input.GetKeyDown(switchGUIKey) && !keyLock)
                 {
                     keyLock = true;
                     showGUI = !showGUI;
                 }
-                else if(Input.GetKeyUp(KeyCode.F1) && keyLock)
+                else if(Input.GetKeyUp(switchGUIKey) && keyLock)
                 {
                     keyLock = false;
                 }
@@ -84,7 +89,7 @@ namespace StarMapTools
                             StarList.RefreshShownValue();
                         }
                         //传送功能
-                        if (Input.GetKeyDown(KeyCode.F2))
+                        if (Input.GetKeyDown(tpKey))
                         {
                             object target = galaxy.StarById(StarList.value + 1);
                             if (PlanetList.value > 0)
@@ -201,6 +206,48 @@ namespace StarMapTools
             }
             //不知为何player的localScale有时会变大,此处恢复原比例
             GameMain.mainPlayer.transform.localScale = Vector3.one;
+        }
+    }
+    class Drag : MonoBehaviour
+    {
+        RectTransform rt;
+        RectTransform parent;
+        RectTransform canvas;
+        Vector3 lastPosition;
+        bool drag = false;
+        void Start()
+        {
+            rt = GetComponent<RectTransform>();//标题栏的rt
+            parent = rt.parent.GetComponent<RectTransform>();//BasePanel的rt
+            canvas = parent.parent.GetComponent<RectTransform>();//canvas的rt
+        }
+        void Update()
+        {
+            //获取鼠标在游戏窗口的unity坐标
+            var m = Input.mousePosition - Vector3.right * Screen.width / 2 - Vector3.up * Screen.height / 2;
+            m.x *= canvas.sizeDelta.x / Screen.width;
+            m.y *= canvas.sizeDelta.y / Screen.height;
+            //获取标题在游戏窗口内的坐标
+            var rp = parent.localPosition + rt.localPosition;
+            //获取标题的rect
+            var re = rt.rect;
+            //判断鼠标是否在标题的范围内按下
+            if (m.x >= rp.x - re.width / 2 && m.x <= rp.x + re.width / 2 && m.y >= rp.y - re.height / 2 && m.y <= rp.y + re.height / 2 && Input.GetMouseButtonDown(0))
+            {
+                drag = true;
+                lastPosition = m;
+            }
+            //获取鼠标是否松开
+            else if (drag && Input.GetMouseButtonUp(0))
+            {
+                drag = false;
+            }
+            //根据鼠标的拖动更新窗口位置
+            if (drag)
+            {
+                parent.localPosition += m - lastPosition;
+                lastPosition = m;
+            }
         }
     }
 }
