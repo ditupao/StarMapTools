@@ -8,7 +8,7 @@ using UnityEngine.UI;
 
 namespace StarMapTools
 {
-    [BepInPlugin("sky.plugins.dsp.StarMapTools", "StarMapTools", "1.1")]
+    [BepInPlugin("sky.plugins.dsp.StarMapTools", "StarMapTools", "1.2")]
     public class StarMapTools: BaseUnityPlugin
     {
         GameObject prefab_StarMapToolsBasePanel;//资源
@@ -20,10 +20,10 @@ namespace StarMapTools
         bool dataLoadOver = false;//是否加载完数据
         bool showGUI = false;//是否显示GUI
         bool keyLock = false;//按键锁
+        bool loadingStarData = false;//是否在加载数据
         GalaxyData galaxy;//星图数据
-
-        KeyCode switchGUIKey;
-        KeyCode tpKey;
+        KeyCode switchGUIKey;//开关GUI的快捷键
+        KeyCode tpKey;//tp的快捷键
         void Start()
         {
             Harmony.CreateAndPatchAll(typeof(StarMapTools), null);
@@ -92,6 +92,7 @@ namespace StarMapTools
                         if (Input.GetKeyDown(tpKey))
                         {
                             object target = galaxy.StarById(StarList.value + 1);
+                            GameMain.data.ArriveStar((StarData)target);
                             if (PlanetList.value > 0)
                             {
                                 target = ((StarData)target).planets[PlanetList.value - 1];
@@ -107,6 +108,15 @@ namespace StarMapTools
                         PlanetList.ClearOptions();
                         InfoText.text = "";
                         galaxy = null;
+                    }
+                    if (loadingStarData)
+                    {
+                        if(galaxy.StarById(StarList.value + 1).loaded)
+                        {
+                            loadingStarData = false;
+                        }
+                        PlanetList.value = -1;
+                        PlanetList.RefreshShownValue();
                     }
                 }
             }
@@ -127,6 +137,11 @@ namespace StarMapTools
                     PlanetList.ClearOptions();
                     if (StarList.value>=0 && StarList.value < galaxy.starCount)
                     {
+                        var star = galaxy.StarById(StarList.value + 1);
+                        if (UIRoot.instance.galaxySelect.starmap.galaxyData != null && !star.loaded)
+                        {
+                            star.Load();
+                        }
                         PlanetList.options.Add(new Dropdown.OptionData("恒星"));
                         foreach (PlanetData planet in galaxy.StarById(StarList.value+1).planets)
                         {
@@ -158,15 +173,34 @@ namespace StarMapTools
                                 break;
                         }
                         info += "海洋类型:" + waterType + "\n";
-
                         if(planet.type!= EPlanetType.Gas && planet.veinSpotsSketch!=null)
                         {
-                            info += "矿脉数量信息:" + "\n";
+                            info += "矿物信息:" + "\n";
                             for(int i = 0; i <LDB.veins.Length; i++)
                             {
                                 var name = LDB.ItemName(LDB.veins.dataArray[i].MiningItem);
-                                var count = planet.veinSpotsSketch[i+1];
-                                info += "    "+name + ":" + count + "\n";
+                                object amount = planet.veinAmounts[i + 1];
+                                if (planet.veinSpotsSketch[i+1]==0)
+                                {
+                                    amount = "无";
+                                }
+                                else if ((long)amount == 0)
+                                {
+                                    if (UIRoot.instance.galaxySelect.starmap.galaxyData != null)
+                                    {
+                                        amount = "正在加载";
+                                        loadingStarData = true;
+                                    }
+                                    else
+                                    {
+                                        amount = "未加载,靠近后显示";
+                                    }
+                                }
+                                else if (i + 1 == 7)
+                                {
+                                    amount = (long)amount * (double)VeinData.oilSpeedMultiplier + " /s";
+                                }
+                                info += "    " + name + ":" + amount + "\n";
                             }
                         }
                         InfoText.text = info;
@@ -179,12 +213,32 @@ namespace StarMapTools
                         info += "星球数量:" + star.planetCount + "\n";
                         info += "光度:" + star.dysonLumino.ToString() + "\n";
                         info += "距离初始星系恒星:" + ((star.uPosition - galaxy.StarById(1).uPosition).magnitude / 2400000.0).ToString()+"光年\n";
-                        info += "矿脉数量信息:" + "\n";
+                        info += "矿物信息:" + "\n";
                         for (int i = 0; i < LDB.veins.Length; i++)
                         {
                             var name = LDB.ItemName(LDB.veins.dataArray[i].MiningItem);
-                            var count = star.GetResourceSpots(i+1);
-                            info += "    " + name + ":" + count + "\n";
+                            object amount = star.GetResourceAmount(i + 1);
+                            if (star.GetResourceSpots(i + 1) == 0)
+                            {
+                                amount = "无";
+                            }
+                            else if ((long)amount == 0)
+                            {
+                                if(UIRoot.instance.galaxySelect.starmap.galaxyData != null)
+                                {
+                                    amount = "正在加载";
+                                    loadingStarData = true;
+                                }
+                                else
+                                {
+                                    amount = "未加载,靠近后显示";
+                                }
+                            }
+                            else if (i + 1 == 7)
+                            {
+                                amount = (long)amount * (double)VeinData.oilSpeedMultiplier + " /s";
+                            }
+                            info += "    " + name + ":" + amount + "\n";
                         }
                         InfoText.text = info;
                     } 
@@ -200,9 +254,13 @@ namespace StarMapTools
             {
                 GameMain.mainPlayer.uPosition =((PlanetData)target).uPosition + VectorLF3.unit_z * (((PlanetData)target).realRadius);
             }
-            else
+            else if(target is StarData)
             {
                 GameMain.mainPlayer.uPosition = ((StarData)target).uPosition + VectorLF3.unit_z * (((StarData)target).physicsRadius);
+                loadingStarData = true;
+            }else if(target is VectorLF3)
+            {
+                GameMain.mainPlayer.uPosition = (VectorLF3)target;
             }
             //不知为何player的localScale有时会变大,此处恢复原比例
             GameMain.mainPlayer.transform.localScale = Vector3.one;
