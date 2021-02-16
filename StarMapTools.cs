@@ -8,7 +8,7 @@ using UnityEngine.UI;
 
 namespace StarMapTools
 {
-    [BepInPlugin("sky.plugins.dsp.StarMapTools", "StarMapTools", "1.2")]
+    [BepInPlugin("sky.plugins.dsp.StarMapTools", "StarMapTools", "1.3")]
     public class StarMapTools: BaseUnityPlugin
     {
         GameObject prefab_StarMapToolsBasePanel;//资源
@@ -24,9 +24,11 @@ namespace StarMapTools
         GalaxyData galaxy;//星图数据
         KeyCode switchGUIKey;//开关GUI的快捷键
         KeyCode tpKey;//tp的快捷键
+        static StarMapTools self;
         void Start()
         {
             Harmony.CreateAndPatchAll(typeof(StarMapTools), null);
+            self = this;
             //加载资源
             switchGUIKey = Config.Bind<KeyCode>("config", "switchGUI", KeyCode.F1, "开关GUI的按键").Value;
             tpKey = Config.Bind<KeyCode>("config", "tp", KeyCode.F2, "传送按键").Value;
@@ -262,8 +264,32 @@ namespace StarMapTools
             {
                 GameMain.mainPlayer.uPosition = (VectorLF3)target;
             }
-            //不知为何player的localScale有时会变大,此处恢复原比例
-            GameMain.mainPlayer.transform.localScale = Vector3.one;
+            else if(target is string && (string)target == "resize")
+            {
+                GameMain.mainPlayer.transform.localScale = Vector3.one;
+            }
+            if (!(target is string) || (string)target != "resize")
+            {
+                StartCoroutine(wait("resize"));
+            }
+        }
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(UIStarmap), "OnStarClick")]
+        private static bool OnStarClick(UIStarmapStar star)
+        {
+            self.StarList.value = star.star.index;
+            self.StarList.RefreshShownValue();
+            return true;
+        }
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(UIStarmap), "OnPlanetClick")]
+        private static bool OnPlanetClick(UIStarmapPlanet planet)
+        {
+            self.StarList.value = planet.planet.star.index;
+            self.StarList.RefreshShownValue();
+            self.PlanetList.value = planet.planet.index+1;
+            self.PlanetList.RefreshShownValue();
+            return true;
         }
     }
     class Drag : MonoBehaviour
