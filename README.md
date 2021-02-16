@@ -8,3 +8,7 @@ v1.1更新内容<br>
 合并类文件(解决与QTools的冲突)<br>
 增加按键配置文件<br>
 配置文件位置 \Dyson Sphere Program\BepInEx\config\sky.plugins.dsp.StarMapTools.cfg
+
+v1.2更新内容<br>
+修正矿物数据的显示<br>
+优化传送
