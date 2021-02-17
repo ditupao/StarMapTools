@@ -1,14 +1,14 @@
 ﻿using BepInEx;
 using HarmonyLib;
-using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace StarMapTools
 {
-    [BepInPlugin("sky.plugins.dsp.StarMapTools", "StarMapTools", "1.3")]
+    [BepInPlugin("sky.plugins.dsp.StarMapTools", "StarMapTools", "2.0")]
     public class StarMapTools: BaseUnityPlugin
     {
         GameObject prefab_StarMapToolsBasePanel;//资源
@@ -17,14 +17,19 @@ namespace StarMapTools
         Dropdown PlanetList;//星球下拉列表
         Text TitleText;//标题
         InputField InfoText;//详细信息
+        Toggle LoadResAmount;//是否加载资源数量
         bool dataLoadOver = false;//是否加载完数据
         bool showGUI = false;//是否显示GUI
-        bool keyLock = false;//按键锁
         bool loadingStarData = false;//是否在加载数据
         GalaxyData galaxy;//星图数据
         KeyCode switchGUIKey;//开关GUI的快捷键
         KeyCode tpKey;//tp的快捷键
-        static StarMapTools self;
+        StarSearcher starSearcher = new StarSearcher();//恒星搜索器
+        ScrollRect OptionsList;//选项列表
+        Dropdown ResultList;//查询结果(用于显示)
+        Button SearchButton;//查询按钮
+        List<StarData> SerachResult;//查询结果
+        static StarMapTools self;//this
         void Start()
         {
             Harmony.CreateAndPatchAll(typeof(StarMapTools), null);
@@ -40,14 +45,9 @@ namespace StarMapTools
             if (dataLoadOver)
             {
                 //根据按键更新showGUI
-                if (Input.GetKeyDown(switchGUIKey) && !keyLock)
+                if (Input.GetKeyDown(switchGUIKey))
                 {
-                    keyLock = true;
                     showGUI = !showGUI;
-                }
-                else if(Input.GetKeyUp(switchGUIKey) && keyLock)
-                {
-                    keyLock = false;
                 }
                 //根据showGUI更新GUI的显示
                 if(showGUI && !ui_StarMapToolsBasePanel.activeSelf || !showGUI && ui_StarMapToolsBasePanel.activeSelf)
@@ -66,6 +66,7 @@ namespace StarMapTools
                             TitleText.text = "新游戏模式";
                             galaxy = UIRoot.instance.galaxySelect.starmap.galaxyData;
                             StarList.ClearOptions();
+                            ResultList.ClearOptions();
                             foreach (StarData star in galaxy.stars)
                             {
                                 StarList.options.Add(new Dropdown.OptionData(star.name));
@@ -83,6 +84,7 @@ namespace StarMapTools
                             TitleText.text = "读档模式";
                             galaxy = GameMain.galaxy;
                             StarList.ClearOptions();
+                            ResultList.ClearOptions();
                             foreach (StarData star in galaxy.stars)
                             {
                                 StarList.options.Add(new Dropdown.OptionData(star.name));
@@ -108,12 +110,13 @@ namespace StarMapTools
                         TitleText.text = "等待数据";
                         StarList.ClearOptions();
                         PlanetList.ClearOptions();
+                        ResultList.ClearOptions();
                         InfoText.text = "";
-                        galaxy = null;
                     }
                     if (loadingStarData)
                     {
-                        if(galaxy.StarById(StarList.value + 1).loaded)
+                        var star = galaxy.StarById(StarList.value + 1);
+                        if (star.loaded || !LoadResAmount.isOn)
                         {
                             loadingStarData = false;
                         }
@@ -134,18 +137,71 @@ namespace StarMapTools
                 StarList =ui_StarMapToolsBasePanel.transform.Find("StarList").GetComponent<Dropdown>();
                 PlanetList = ui_StarMapToolsBasePanel.transform.Find("PlanetList").GetComponent<Dropdown>();
                 InfoText = ui_StarMapToolsBasePanel.transform.Find("InfoText").GetComponent<InputField>();
+                LoadResAmount= ui_StarMapToolsBasePanel.transform.Find("LoadResAmount").GetComponent<Toggle>();
+                OptionsList = ui_StarMapToolsBasePanel.transform.Find("OptionsList").GetComponent<ScrollRect>();
+                ResultList = ui_StarMapToolsBasePanel.transform.Find("ResultList").GetComponent<Dropdown>();
+                SearchButton = ui_StarMapToolsBasePanel.transform.Find("SearchButton").GetComponent<Button>();
+                var TempToggle = OptionsList.content.Find("TempToggle").GetComponent<Toggle>();
+                //获取数据
+                var TempStarTypes = starSearcher.AllStarTypes;
+                var TempPlanteTypes=starSearcher.AllPlanteTypes;
+                var TempSingularityTypes=starSearcher.AllSingularityTypes;
+                var TempVeinTypes=starSearcher.AllVeinTypes;
+                //各种选项的列表
+                var StarTypesToggleList = new List<Toggle>();
+                var PlanteTypesToggleList = new List<Toggle>();
+                var SingularityTypesToggleList = new List<Toggle>();
+                var VeinTypesToggleList = new List<Toggle>();
+                //实例化
+                for (int i = 0; i < TempStarTypes.Count;i++)
+                {
+                    var toggle = GameObject.Instantiate<Toggle>(TempToggle,TempToggle.transform.parent).GetComponent<RectTransform>();
+                    toggle.Find("Label").GetComponent<Text>().text = TempStarTypes[i];
+                    toggle.GetComponent<Toggle>().isOn = true;
+                    toggle.anchorMax = new Vector2((float)0.25, (float)(1 - i * 0.1));
+                    toggle.anchorMin = new Vector2(0, (float)(1 - (i+1) * 0.1));
+                    toggle.gameObject.SetActive(true);
+                    StarTypesToggleList.Add(toggle.GetComponent<Toggle>());
+                }
+                for (int i = 0; i < TempPlanteTypes.Count; i++)
+                {
+                    var toggle = GameObject.Instantiate<Toggle>(TempToggle, TempToggle.transform.parent).GetComponent<RectTransform>();
+                    toggle.Find("Label").GetComponent<Text>().text = TempPlanteTypes[i];
+                    toggle.anchorMax = new Vector2((float)0.5, (float)(1 - i * 0.1));
+                    toggle.anchorMin = new Vector2((float)0.25, (float)(1 - (i + 1) * 0.1));
+                    toggle.gameObject.SetActive(true);
+                    PlanteTypesToggleList.Add(toggle.GetComponent<Toggle>());
+                }
+                for (int i = 0; i < TempSingularityTypes.Count; i++)
+                {
+                    var toggle = GameObject.Instantiate<Toggle>(TempToggle, TempToggle.transform.parent).GetComponent<RectTransform>();
+                    toggle.Find("Label").GetComponent<Text>().text = TempSingularityTypes[i];
+                    toggle.anchorMax = new Vector2((float)0.75, (float)(1 - i * 0.1));
+                    toggle.anchorMin = new Vector2((float)0.5, (float)(1 - (i + 1) * 0.1));
+                    toggle.gameObject.SetActive(true);
+                    SingularityTypesToggleList.Add(toggle.GetComponent<Toggle>());
+                }
+                for (int i = 0; i < TempVeinTypes.Count; i++)
+                {
+                    var toggle = GameObject.Instantiate<Toggle>(TempToggle, TempToggle.transform.parent).GetComponent<RectTransform>();
+                    toggle.Find("Label").GetComponent<Text>().text = TempVeinTypes[i];
+                    toggle.anchorMax = new Vector2(1, (float)(1 - i * 0.1));
+                    toggle.anchorMin = new Vector2((float)0.75, (float)(1 - (i + 1) * 0.1));
+                    toggle.gameObject.SetActive(true);
+                    VeinTypesToggleList.Add(toggle.GetComponent<Toggle>());
+                }
                 //切换恒星事件
                 StarList.onValueChanged.AddListener(delegate {
                     PlanetList.ClearOptions();
                     if (StarList.value>=0 && StarList.value < galaxy.starCount)
                     {
                         var star = galaxy.StarById(StarList.value + 1);
-                        if (UIRoot.instance.galaxySelect.starmap.galaxyData != null && !star.loaded)
+                        if (LoadResAmount.isOn && UIRoot.instance.galaxySelect.starmap.galaxyData != null && !star.loaded)
                         {
                             star.Load();
                         }
                         PlanetList.options.Add(new Dropdown.OptionData("恒星"));
-                        foreach (PlanetData planet in galaxy.StarById(StarList.value+1).planets)
+                        foreach (PlanetData planet in star.planets)
                         {
                             PlanetList.options.Add(new Dropdown.OptionData(planet.name));
                         }
@@ -155,9 +211,10 @@ namespace StarMapTools
                 });
                 //切换星球事件
                 PlanetList.onValueChanged.AddListener(delegate {
-                    if(PlanetList.value>0 && PlanetList.value <= galaxy.StarById(StarList.value+1).planetCount)
+                    var star = galaxy.StarById(StarList.value + 1);
+                    if (PlanetList.value>0 && PlanetList.value <= star.planetCount)
                     {
-                        var planet = galaxy.StarById(StarList.value+1).planets[PlanetList.value - 1];
+                        var planet = star.planets[PlanetList.value - 1];
                         var info = planet.name+"的信息:\n";
                         info += "词条:" + planet.singularityString + "\n";//词条
                         info += "类型:" + planet.typeString + "\n";
@@ -180,7 +237,7 @@ namespace StarMapTools
                             info += "矿物信息:" + "\n";
                             for(int i = 0; i <LDB.veins.Length; i++)
                             {
-                                var name = LDB.ItemName(LDB.veins.dataArray[i].MiningItem);
+                                var name = LDB.veins.dataArray[i].name;
                                 object amount = planet.veinAmounts[i + 1];
                                 if (planet.veinSpotsSketch[i+1]==0)
                                 {
@@ -188,7 +245,11 @@ namespace StarMapTools
                                 }
                                 else if ((long)amount == 0)
                                 {
-                                    if (UIRoot.instance.galaxySelect.starmap.galaxyData != null)
+                                    if (!LoadResAmount.isOn)
+                                    {
+                                        amount = "有";
+                                    }
+                                    else if (UIRoot.instance.galaxySelect.starmap.galaxyData != null)
                                     {
                                         amount = "正在加载";
                                         loadingStarData = true;
@@ -209,16 +270,20 @@ namespace StarMapTools
                     }
                     else if (PlanetList.value == 0)
                     {
-                        var star = galaxy.StarById(StarList.value+1);
-                        var info = star.name + "星系的信息:\n";
+                        var info = star.name + "星系的信息:"+(loadingStarData?"正在加载":"")+"\n";
                         info += "恒星类型:" + star.typeString + "\n";
                         info += "星球数量:" + star.planetCount + "\n";
                         info += "光度:" + star.dysonLumino.ToString() + "\n";
                         info += "距离初始星系恒星:" + ((star.uPosition - galaxy.StarById(1).uPosition).magnitude / 2400000.0).ToString()+"光年\n";
+                        info += "星球列表:" + "\n";
+                        foreach (PlanetData planet in star.planets)
+                        {
+                            info += "    "+planet.typeString + "  " + planet.singularityString+"\n";
+                        }
                         info += "矿物信息:" + "\n";
                         for (int i = 0; i < LDB.veins.Length; i++)
                         {
-                            var name = LDB.ItemName(LDB.veins.dataArray[i].MiningItem);
+                            var name = LDB.veins.dataArray[i].name;
                             object amount = star.GetResourceAmount(i + 1);
                             if (star.GetResourceSpots(i + 1) == 0)
                             {
@@ -226,7 +291,11 @@ namespace StarMapTools
                             }
                             else if ((long)amount == 0)
                             {
-                                if(UIRoot.instance.galaxySelect.starmap.galaxyData != null)
+                                if (!LoadResAmount.isOn)
+                                {
+                                    amount = "有";
+                                }
+                                else if(UIRoot.instance.galaxySelect.starmap.galaxyData != null)
                                 {
                                     amount = "正在加载";
                                     loadingStarData = true;
@@ -243,7 +312,62 @@ namespace StarMapTools
                             info += "    " + name + ":" + amount + "\n";
                         }
                         InfoText.text = info;
-                    } 
+                    }
+                });
+                //搜索事件
+                SearchButton.onClick.AddListener(delegate {
+                    starSearcher.galaxyData = galaxy;
+                    starSearcher.Clear();
+                    foreach(Toggle toggle in StarTypesToggleList)
+                    {
+                        if (toggle.isOn)
+                        {
+                            var typeString = toggle.transform.Find("Label").GetComponent<Text>().text;
+                            starSearcher.StarTypes.Add(typeString);
+                            Debug.Log(typeString);
+                        }
+                    }
+                    foreach (Toggle toggle in PlanteTypesToggleList)
+                    {
+                        if (toggle.isOn)
+                        {
+                            var typeString = toggle.transform.Find("Label").GetComponent<Text>().text;
+                            starSearcher.PlanteTypes.Add(typeString);
+                            Debug.Log(typeString);
+                        }
+                    }
+                    foreach (Toggle toggle in SingularityTypesToggleList)
+                    {
+                        if (toggle.isOn)
+                        {
+                            var typeString = toggle.transform.Find("Label").GetComponent<Text>().text;
+                            starSearcher.SingularityTypes.Add(typeString);
+                            Debug.Log(typeString);
+                        }
+                    }
+                    foreach (Toggle toggle in VeinTypesToggleList)
+                    {
+                        if (toggle.isOn)
+                        {
+                            var typeString = toggle.transform.Find("Label").GetComponent<Text>().text;
+                            starSearcher.VeinTypes.Add(typeString);
+                            Debug.Log(typeString);
+                        }
+                    }
+                    SerachResult = starSearcher.Search();
+                    ResultList.ClearOptions();
+                    foreach (StarData star in SerachResult)
+                    {
+                        ResultList.options.Add(new Dropdown.OptionData(star.name));
+                        Debug.Log(star.name);
+                    }
+                    ResultList.value = -1;
+                    ResultList.RefreshShownValue();
+                });
+                //切换搜索结果事件
+                ResultList.onValueChanged.AddListener(delegate {
+                    StarList.value = SerachResult[ResultList.value].index;
+                    StarList.RefreshShownValue();
                 });
                 dataLoadOver = true;
             }
@@ -291,6 +415,23 @@ namespace StarMapTools
             self.PlanetList.RefreshShownValue();
             return true;
         }
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(GalaxyData), "Free")]
+        private static bool Free(GalaxyData __instance)
+        {
+            foreach(StarData star in __instance.stars)
+            {
+                foreach(PlanetData planet in star.planets)
+                {
+                    if (planet.loading)
+                    {
+                        Debug.Log("由StarMapTools阻止的GalaxyData.Free()");
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
     }
     class Drag : MonoBehaviour
     {
@@ -333,5 +474,135 @@ namespace StarMapTools
                 lastPosition = m;
             }
         }
+    }
+    //恒星搜索器
+    class StarSearcher
+    {
+        public GalaxyData galaxyData { get; set; }
+        public List<string> StarTypes = new List<string>();//搜索的恒星类型属于其中之一
+        public List<string> PlanteTypes = new List<string>();//搜索的星系中包含所有以下类型星球
+        public List<string> SingularityTypes = new List<string>();//搜索的星系包含所有以下的词条
+        public List<string> VeinTypes = new List<string>();//搜索的星系包含以下所有的矿物
+        public List<string> AllStarTypes
+        {
+            get
+            {
+                var list = new List<string>();
+                list.Add("红巨星".Translate());
+                list.Add("黄巨星".Translate());
+                list.Add("白巨星".Translate());
+                list.Add("蓝巨星".Translate());
+
+                list.Add("M" + "型恒星".Translate());
+                list.Add("K" + "型恒星".Translate());
+                list.Add("G" + "型恒星".Translate());
+                list.Add("F" + "型恒星".Translate());
+                list.Add("A" + "型恒星".Translate());
+                list.Add("B" + "型恒星".Translate());
+                list.Add("O" + "型恒星".Translate());
+
+                list.Add("中子星".Translate());
+                list.Add("白矮星".Translate());
+                list.Add("黑洞".Translate());
+                return list;
+            }
+        }
+        public List<string> AllPlanteTypes
+        {
+            get
+            {
+                var list = new List<string>();
+                foreach (ThemeProto themeProto in LDB.themes.dataArray)
+                {
+                    if (!list.Contains(themeProto.displayName))
+                    {
+                        list.Add(themeProto.displayName);
+                    }
+                }
+                return list;
+            }
+        }
+        public List<string> AllSingularityTypes {
+            get
+            {
+                var list = new List<string>();
+                list.Add("卫星".Translate());
+                list.Add("潮汐锁定永昼永夜".Translate());
+                list.Add("潮汐锁定1:2".Translate());
+                list.Add("潮汐锁定1:4".Translate());
+                list.Add("横躺自转".Translate());
+                list.Add("反向自转".Translate());
+                list.Add("多卫星".Translate());
+                return list;
+            }
+        }
+        public List<string> AllVeinTypes
+        {
+            get
+            {
+                var list = new List<string>();
+                foreach(VeinProto veinProto in LDB.veins.dataArray)
+                {
+                    list.Add(veinProto.name);
+                }
+                return list;
+            }
+        }
+        //查找星系
+        public List<StarData> Search()
+        {
+            List<StarData> result = new List<StarData>();
+            if (galaxyData != null)
+            {
+                foreach(StarData star in galaxyData.stars)
+                {
+                    if (StarTypes.Contains(star.typeString))
+                    {
+                        List<string> TempPlanteTypes = new List<string>();
+                        List<string> TempSingularityTypes = new List<string>();
+                        List<string> TempVeinTypes = new List<string>();
+                        foreach(PlanetData planet in star.planets)
+                        {
+                            if (!TempPlanteTypes.Contains(planet.typeString))
+                            {
+                                TempPlanteTypes.Add(planet.typeString);
+                            }
+                            if (!TempSingularityTypes.Contains(planet.singularityString))
+                            {
+                                TempSingularityTypes.Add(planet.singularityString);
+                            }
+                        }
+                        for(int i = 0; i < LDB.veins.Length; i++)
+                        {
+                            if (star.GetResourceSpots(i + 1) > 0)
+                            {
+                                TempVeinTypes.Add(LDB.veins.dataArray[i].name);
+                            }
+                        }
+                        if (PlanteTypes.TrueForAll(delegate (string ePlanetType) { return TempPlanteTypes.Contains(ePlanetType); }) && SingularityTypes.TrueForAll(delegate (string ePlanetSingularity) { return TempSingularityTypes.Contains(ePlanetSingularity); }) && VeinTypes.TrueForAll(delegate (string eVeinType) { return TempVeinTypes.Contains(eVeinType); }))
+                        {
+                            result.Add(star);
+                        }
+                    }
+                }
+                return result;
+            }
+            else
+            {
+                return result;
+            }
+        }
+        public void Clear()
+        {
+            StarTypes.Clear();
+            PlanteTypes.Clear();
+            SingularityTypes.Clear();
+            VeinTypes.Clear();
+        }
+    }
+    //种子搜索器
+    class SeedSearcher
+    {
+
     }
 }
