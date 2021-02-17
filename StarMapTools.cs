@@ -324,7 +324,6 @@ namespace StarMapTools
                         {
                             var typeString = toggle.transform.Find("Label").GetComponent<Text>().text;
                             starSearcher.StarTypes.Add(typeString);
-                            Debug.Log(typeString);
                         }
                     }
                     foreach (Toggle toggle in PlanteTypesToggleList)
@@ -333,7 +332,6 @@ namespace StarMapTools
                         {
                             var typeString = toggle.transform.Find("Label").GetComponent<Text>().text;
                             starSearcher.PlanteTypes.Add(typeString);
-                            Debug.Log(typeString);
                         }
                     }
                     foreach (Toggle toggle in SingularityTypesToggleList)
@@ -342,7 +340,6 @@ namespace StarMapTools
                         {
                             var typeString = toggle.transform.Find("Label").GetComponent<Text>().text;
                             starSearcher.SingularityTypes.Add(typeString);
-                            Debug.Log(typeString);
                         }
                     }
                     foreach (Toggle toggle in VeinTypesToggleList)
@@ -351,7 +348,6 @@ namespace StarMapTools
                         {
                             var typeString = toggle.transform.Find("Label").GetComponent<Text>().text;
                             starSearcher.VeinTypes.Add(typeString);
-                            Debug.Log(typeString);
                         }
                     }
                     SerachResult = starSearcher.Search();
@@ -359,7 +355,6 @@ namespace StarMapTools
                     foreach (StarData star in SerachResult)
                     {
                         ResultList.options.Add(new Dropdown.OptionData(star.name));
-                        Debug.Log(star.name);
                     }
                     ResultList.value = -1;
                     ResultList.RefreshShownValue();
